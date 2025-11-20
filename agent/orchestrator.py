@@ -208,7 +208,7 @@ class Planner:
             
             # Generate with Gemini
             generation_config = genai.types.GenerationConfig(
-                temperature=0.2,
+                temperature=0.1,
                 response_mime_type="application/json",
             )
             
