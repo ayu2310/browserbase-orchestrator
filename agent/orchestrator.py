@@ -68,6 +68,15 @@ class Planner:
             Recent actions: {json.dumps(history[-3:], indent=2) if history else "None"}
             {screenshot_context}
             
+            CRITICAL WORKFLOW FOR COMPLEX TASKS:
+            1. Always start with browserbase_session_create (if no session)
+            2. Navigate to the target URL
+            3. Take a screenshot to see the page
+            4. Use browserbase_stagehand_act for ALL interactions (clicks, typing, scrolling, form filling)
+            5. Use browserbase_stagehand_extract ONLY for reading/extracting data (not for interactions)
+            6. Take screenshots after important actions to verify results
+            7. Close session when done
+            
             AVAILABLE TOOLS (flowState is automatically handled - don't include it):
             
             1. browserbase_session_create
@@ -75,29 +84,34 @@ class Planner:
                How: {{}} (empty arguments)
             
             2. browserbase_stagehand_navigate
-               When: Go to a website
+               When: Go to a website or change pages
                How: {{"url": "https://example.com"}}
+               Note: This sets the startingUrl but does NOT create actions. Use act for navigation interactions.
             
             3. browserbase_stagehand_screenshot
-               When: You need to see what's on the page (use this to understand the page before acting)
+               When: You need to see what's on the page
                How: {{}} (empty arguments)
-               Note: Screenshots help you see the page and make better decisions. Use this if you're unsure what's visible.
+               Note: Use this frequently to understand page state. Take screenshots after important actions.
             
             4. browserbase_stagehand_observe
-               When: You need to find a SPECIFIC clickable element (button, link) that you can't describe naturally
+               When: You need to find a SPECIFIC element that's hard to describe (use sparingly, max 2-3 times per task)
                How: {{"instruction": "Find the login button", "returnAction": true}}
-               Note: Use SPARINGLY (max 2-3 times). If it fails, use natural language actions instead.
+               Note: Only use if natural language actions fail. Prefer browserbase_stagehand_act with natural language.
             
-            5. browserbase_stagehand_act
-               When: Interact with the page (click, type, scroll, fill forms)
-               How: {{"action": "Click the submit button"}} OR {{"observation": {{"selector": "...", "method": "click"}}}}
+            5. browserbase_stagehand_act ⭐ USE THIS FOR ALL INTERACTIONS
+               When: ANY interaction with the page (click, type, scroll, fill, select, etc.)
+               How: {{"action": "Natural language description of what to do"}}
                Examples:
-                 - Click: {{"action": "Click the login button"}}
-                 - Type: {{"action": "Type 'search term' in the search box"}}
+                 - Click button: {{"action": "Click the 'Sign In' button"}}
+                 - Type text: {{"action": "Type 'username123' in the email input field"}}
+                 - Fill form: {{"action": "Fill the login form with email 'user@example.com' and password 'pass123'"}}
                  - Scroll: {{"action": "Scroll down to see more products"}}
+                 - Select: {{"action": "Select 'United States' from the country dropdown"}}
+                 - Wait: {{"action": "Wait for the page to load"}}
+               IMPORTANT: This is the ONLY tool that creates actions in flowState. Use it for ALL user interactions.
             
             6. browserbase_stagehand_extract
-               When: Extract structured data from the page
+               When: Extract structured data from the page (reading only, no interactions)
                How: {{"instruction": "Extract the top 5 products with names and descriptions"}}
                Note: Use this to get data. More reliable than observe for reading content.
             
@@ -285,13 +299,72 @@ class OrchestratorAgent:
                 break
 
             if decision.status != "call_tool" or not decision.tool:
-                summary = "Planner could not decide on a tool; stopping."
+                summary = decision.response or "Planner could not decide on a tool; stopping."
                 if self.on_update:
                     await self.on_update({
                         "type": "error",
                         "message": summary,
                     })
                 break
+            
+            # Handle tool errors gracefully - retry with different approach
+            max_retries = 2
+            retry_count = 0
+            result = None
+            tool_error = None
+            
+            while retry_count <= max_retries:
+                try:
+                    # Execute tool
+                    result = await self._invoke_tool(decision.tool, decision.arguments)
+                    tool_error = None
+                    break
+                except Exception as e:
+                    tool_error = str(e)
+                    retry_count += 1
+                    if retry_count <= max_retries:
+                        # If tool fails, try to recover
+                        if "not found" in tool_error.lower() or "error" in tool_error.lower():
+                            # Tool doesn't exist or failed - try alternative approach
+                            if decision.tool == "browserbase_stagehand_screenshot":
+                                # Screenshot failed, continue without it
+                                result = {"message": "Screenshot unavailable, continuing"}
+                                break
+                            elif decision.tool == "browserbase_stagehand_observe":
+                                # Observe failed, suggest using natural language act instead
+                                if self.on_update:
+                                    await self.on_update({
+                                        "type": "reasoning",
+                                        "step": step,
+                                        "reasoning": f"Observe failed: {tool_error}. Will try natural language action instead.",
+                                        "tool": decision.tool,
+                                        "status": "retry",
+                                    })
+                                # Don't retry observe, let LLM decide next step
+                                result = {"message": f"Observe failed: {tool_error}"}
+                                break
+                            else:
+                                # Other tool failed, retry once
+                                await asyncio.sleep(1)  # Brief pause before retry
+                                continue
+                        else:
+                            # Unknown error, don't retry
+                            raise
+                    else:
+                        # Max retries reached
+                        raise
+            
+            if tool_error and not result:
+                # Tool failed after retries
+                if self.on_update:
+                    await self.on_update({
+                        "type": "error",
+                        "message": f"Tool {decision.tool} failed after retries: {tool_error}",
+                    })
+                # Continue to next step instead of breaking
+                result = {"message": f"Tool failed: {tool_error}"}
+            
+            # Original code continues here with result processing
 
             # Execute tool
             result = await self._invoke_tool(decision.tool, decision.arguments)
