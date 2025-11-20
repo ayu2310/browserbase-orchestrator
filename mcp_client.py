@@ -177,18 +177,48 @@ class MCPClient:
                     elif item.get("type") == "text":
                         text = item.get("text", "")
                         # Try to extract flowState from text (common in MCP responses)
-                        if "flowState" in text:
+                        if "flowState" in text or "flow_state" in text.lower():
                             try:
-                                # Look for JSON object in text
-                                # Try to find flowState JSON object
-                                match = re.search(r'"flowState"\s*:\s*(\{[^}]+\})', text, re.DOTALL)
+                                # Look for flowState JSON object in text
+                                # Pattern 1: "flowState (persist externally): { ... }"
+                                match = re.search(r'flowState[^:]*:\s*(\{.*?\})', text, re.DOTALL)
+                                if not match:
+                                    # Pattern 2: "flowState": { ... }
+                                    match = re.search(r'["\']?flowState["\']?\s*:\s*(\{.*?\})', text, re.DOTALL)
+                                if not match:
+                                    # Pattern 3: Just find any JSON object after "flowState"
+                                    match = re.search(r'flowState[^:]*:\s*(\{[^}]*(?:\{[^}]*\}[^}]*)*\})', text, re.DOTALL)
+                                
                                 if match:
                                     flow_state_str = match.group(1)
+                                    # Try to parse as JSON
                                     flow_state = json.loads(flow_state_str)
                                     if isinstance(flow_state, dict):
                                         return flow_state
-                            except (json.JSONDecodeError, AttributeError):
-                                pass
+                            except (json.JSONDecodeError, AttributeError, ValueError) as e:
+                                # If regex match fails, try to find complete JSON object
+                                try:
+                                    # Look for complete JSON object starting with {
+                                    json_start = text.find('{')
+                                    if json_start != -1:
+                                        # Try to find matching closing brace
+                                        brace_count = 0
+                                        json_end = json_start
+                                        for i, char in enumerate(text[json_start:], json_start):
+                                            if char == '{':
+                                                brace_count += 1
+                                            elif char == '}':
+                                                brace_count -= 1
+                                                if brace_count == 0:
+                                                    json_end = i + 1
+                                                    break
+                                        if brace_count == 0:
+                                            json_str = text[json_start:json_end]
+                                            parsed = json.loads(json_str)
+                                            if isinstance(parsed, dict) and ("cacheKey" in parsed or "browserbaseSessionId" in parsed):
+                                                return parsed
+                                except (json.JSONDecodeError, ValueError):
+                                    pass
                     # Direct flowState in item
                     elif "flowState" in item and isinstance(item["flowState"], dict):
                         return item["flowState"]
