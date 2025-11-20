@@ -364,11 +364,6 @@ class OrchestratorAgent:
                 # Continue to next step instead of breaking
                 result = {"message": f"Tool failed: {tool_error}"}
             
-            # Original code continues here with result processing
-
-            # Execute tool
-            result = await self._invoke_tool(decision.tool, decision.arguments)
-            
             # If session was closed, next decision should be finish
             if decision.tool == "browserbase_session_close":
                 # Wait for next decision which should be finish
