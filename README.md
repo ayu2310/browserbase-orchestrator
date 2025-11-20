@@ -76,8 +76,6 @@ python api_server.py
 
 ## Documentation
 
-- `DEPLOYMENT_STATUS.md` - Complete deployment guide
-- `DEPLOY_RENDER.md` - Detailed Render deployment steps
 - `MCP_SERVER_GUIDE.md` - Browserbase MCP server documentation
 
 ## License
