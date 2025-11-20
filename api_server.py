@@ -79,6 +79,14 @@ async def run_task(request: dict):
             async def run_agent():
                 try:
                     result = await agent.run()
+                    # Ensure flowState is saved to database for replay
+                    if result.flow_state:
+                        from database import save_flow_state
+                        save_flow_state(
+                            cache_key=result.cache_key,
+                            prompt=task_prompt,
+                            flow_state=result.flow_state,
+                        )
                     await updates_queue.put({
                         "type": "final",
                         "cache_key": result.cache_key,
@@ -120,8 +128,9 @@ async def run_task(request: dict):
                         "data": json.dumps(update, default=str),
                     }
 
-                    if update.get("type") in ("error", "final", "confirmation_required"):
+                    if update.get("type") == "error":
                         break
+                    # Don't break on final or confirmation_required - let them both be sent
 
                 except asyncio.TimeoutError:
                     yield {
