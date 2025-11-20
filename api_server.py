@@ -84,7 +84,8 @@ async def run_task(request: dict):
                         "cache_key": result.cache_key,
                         "summary": result.summary,
                         "total_steps": len(result.steps),
-                        "flow_state": result.flow_state,
+                        "flow_state": result.flow_state,  # Return flowState for deterministic replay
+                        "steps": result.steps,  # Include all steps for reference
                     })
                 except Exception as e:
                     await updates_queue.put({

@@ -52,158 +52,87 @@ class Planner:
         task_prompt: str,
         history: List[Dict[str, Any]],
         state_snapshot: str,
+        screenshot: Optional[str] = None,
     ) -> PlannerDecision:
         """Call GPT-4o to choose the next MCP tool invocation."""
 
+        screenshot_context = ""
+        if screenshot:
+            screenshot_context = f"\n\nCURRENT PAGE SCREENSHOT (base64 image):\nYou can see the current state of the page. Use this to understand what's visible and make informed decisions about what actions to take."
+        
         prompt = textwrap.dedent(
             f"""
-            You orchestrate Browserbase Stagehand tools via the Model Context Protocol (MCP).
+            You are an autonomous browser automation agent. Your task: {task_prompt}
             
-            CRITICAL: The MCP server is STATELESS. The system automatically manages flowState for you.
-            flowState is a JSON snapshot that contains:
-            - browserbaseSessionId: Maintains the same browser session across calls
-            - startingUrl: The initial URL navigated to
-            - actions: Chronological array of all actions performed (for deterministic replay)
-            - cacheKey: Unique identifier for this workflow
-            
-            PURPOSE OF flowState: Enables deterministic re-executions. Each tool call returns an updated 
-            flowState with new actions appended. The system automatically:
-            1. Attaches the latest flowState to your tool calls (you don't need to include it manually)
-            2. Extracts and stores flowState from each response
-            3. Persists flowState for later replay
-            
-            Task: {task_prompt}
             Current state: {state_snapshot}
+            Recent actions: {json.dumps(history[-3:], indent=2) if history else "None"}
+            {screenshot_context}
             
-            IMPORTANT: Check the current state above. If it shows a session exists, you MUST use that 
-            session. Do NOT create a new session if one already exists.
-
-            Recent actions (last 6):
-            {json.dumps(history[-6:], indent=2) if history else "[]"}
-
-            Available tools: {", ".join(ALLOWED_TOOLS)}
-
-            TOOL SCHEMAS (REQUIRED PARAMETERS):
+            AVAILABLE TOOLS (flowState is automatically handled - don't include it):
             
-            NOTE: flowState is AUTOMATICALLY handled by the system. You do NOT need to include it in your 
-            arguments - the system will automatically attach the latest flowState to maintain session continuity 
-            and enable deterministic replay. Focus on providing the tool-specific parameters below.
+            1. browserbase_session_create
+               When: Start of task (only if no session exists)
+               How: {{}} (empty arguments)
             
-            - `browserbase_session_create`: 
-              Arguments: {{}} (empty - system handles flowState automatically)
-              Note: Creates a new browser session. Use ONLY ONCE at the start if no session exists.
-              The system automatically creates flowState with cacheKey.
+            2. browserbase_stagehand_navigate
+               When: Go to a website
+               How: {{"url": "https://example.com"}}
             
-            - `browserbase_session_close`: 
-              Arguments: {{}} (empty - system handles flowState automatically)
-              Note: Closes the browser session. Call this when task is complete.
+            3. browserbase_stagehand_screenshot
+               When: You need to see what's on the page (use this to understand the page before acting)
+               How: {{}} (empty arguments)
+               Note: Screenshots help you see the page and make better decisions. Use this if you're unsure what's visible.
             
-            - `browserbase_stagehand_navigate`: 
-              Arguments: {{"url": "https://example.com"}}
-              Required: url (string) - the URL to navigate to
-              Note: Sets the startingUrl in flowState. Use this to go to a website.
-              flowState is automatically attached by the system.
+            4. browserbase_stagehand_observe
+               When: You need to find a SPECIFIC clickable element (button, link) that you can't describe naturally
+               How: {{"instruction": "Find the login button", "returnAction": true}}
+               Note: Use SPARINGLY (max 2-3 times). If it fails, use natural language actions instead.
             
-            - `browserbase_stagehand_observe`: 
-              Arguments: {{"instruction": "Find the login button", "returnAction": true}}
-              Required: instruction (string) - what element to find
-              Optional: returnAction (boolean) - set to true to get actionable selectors
-              Note: Use SPARINGLY (max 2-3 times per task). Only when you need a specific clickable element.
-              flowState is automatically attached by the system.
+            5. browserbase_stagehand_act
+               When: Interact with the page (click, type, scroll, fill forms)
+               How: {{"action": "Click the submit button"}} OR {{"observation": {{"selector": "...", "method": "click"}}}}
+               Examples:
+                 - Click: {{"action": "Click the login button"}}
+                 - Type: {{"action": "Type 'search term' in the search box"}}
+                 - Scroll: {{"action": "Scroll down to see more products"}}
             
-            - `browserbase_stagehand_act`: 
-              Arguments (Mode 1 - Natural Language): {{"action": "Click the submit button"}}
-              Arguments (Mode 2 - Deterministic): {{"observation": {{"selector": "...", "method": "click"}}}}
-              Required: EITHER "action" (string) OR "observation" (object from observe)
-              Note: Use for ALL browser interactions (click, type, scroll, fill forms, etc.)
-              flowState is automatically attached by the system.
-              Examples:
-                - Click: {{"action": "Click the login button"}}
-                - Type: {{"action": "Type 'search term' into the search box"}}
-                - Scroll: {{"action": "Scroll down to see more products"}}
-                - Fill: {{"action": "Fill the email field with 'user@example.com'"}}
+            6. browserbase_stagehand_extract
+               When: Extract structured data from the page
+               How: {{"instruction": "Extract the top 5 products with names and descriptions"}}
+               Note: Use this to get data. More reliable than observe for reading content.
             
-            - `browserbase_stagehand_extract`: 
-              Arguments: {{"instruction": "Extract the top 5 products with their names, descriptions, and links"}}
-              Required: instruction (string) - detailed extraction instructions
-              Note: Use this to extract structured data from pages. More reliable than observe for reading data.
-              flowState is automatically attached by the system.
-              Example: {{"instruction": "Extract the top 5 trending AI products with their names, descriptions, and what makes them trending"}}
+            7. browserbase_stagehand_get_url
+               When: Check current URL
+               How: {{}} (empty arguments)
             
-            - `browserbase_stagehand_screenshot`: 
-              Arguments: {{}} (empty - system handles flowState automatically)
-              Note: Captures a screenshot of the current page state.
+            8. browserbase_session_close
+               When: Task is complete
+               How: {{}} (empty arguments)
+               Then: Immediately return status "finish"
             
-            - `browserbase_stagehand_get_url`: 
-              Arguments: {{}} (empty - system handles flowState automatically)
-              Note: Returns the current URL of the page.
-
-            CRITICAL TOOL USAGE RULES:
+            WORKFLOW:
+            1. If no session: create session
+            2. Navigate to target URL
+            3. Take screenshot to see the page
+            4. Based on screenshot, decide actions:
+               - If you need to find a button: observe (sparingly)
+               - If you need to interact: act with natural language
+               - If you need data: extract
+            5. When done: close session, then finish
             
-            1. SESSION MANAGEMENT:
-               - Use `browserbase_session_create` ONLY ONCE at the start if no session exists.
-               - Use `browserbase_session_close` at the END when task is complete.
+            IMPORTANT:
+            - Use screenshots to understand the page before acting
+            - Prefer natural language actions over observe
+            - Extract data directly - don't observe first
+            - Close session when complete, then return finish status
             
-            2. NAVIGATION:
-               - Use `browserbase_stagehand_navigate` to go to URLs (sets `startingUrl`).
-               - Use `browserbase_stagehand_get_url` to check current URL if needed.
-            
-            3. OBSERVE (Use VERY SPARINGLY - only when you MUST find a specific clickable element):
-               - Use `browserbase_stagehand_observe` ONLY when you need to find a SPECIFIC element to CLICK.
-               - Set `returnAction=true` to get actionable selectors.
-               - DO NOT observe to "see what's on the page" - use extract or natural language actions instead.
-               - DO NOT observe repeatedly - if observe returns empty, try extract or natural language actions.
-               - DO NOT observe more than 2-3 times total - if it fails, switch to extract or natural language.
-               - After observing, immediately use the returned selectors in `browserbase_stagehand_act`.
-               - If you need to READ or EXTRACT data, use `browserbase_stagehand_extract` directly - don't observe first.
-            
-            4. ACT (Use for ALL interactions):
-               - Use `browserbase_stagehand_act` for ALL user interactions:
-                 * Clicking: "Click the login button" or use observation with method "click"
-                 * Typing: "Type 'search term' into the search box" or use observation with method "fill"
-                 * Scrolling: "Scroll down to see more products"
-                 * Filling forms: "Fill the email field with 'user@example.com'"
-                 * Any other browser action
-               - Prefer natural language actions when you know what to do: `{{"action": "Click the submit button"}}`
-               - Use deterministic observations when you have them: `{{"observation": {{...}}, "flowState": ...}}`
-               - You can combine multiple actions in natural language: "Scroll down and click the 'Load More' button"
-            
-            5. DATA EXTRACTION (PREFERRED over observe for reading data):
-               - Use `browserbase_stagehand_extract` DIRECTLY to extract data - you don't need to observe first.
-               - Provide clear, specific extraction instructions: "Extract the top 5 trending AI products with their names, descriptions, and links"
-               - Extract can read and parse page content without needing to observe elements first.
-               - If you need to scroll or interact before extracting, use natural language actions: "Scroll down to see more products, then extract the top 5 AI products"
-               - Extract is more reliable than observe for getting text/data from pages.
-            
-            6. VERIFICATION:
-               - Use `browserbase_stagehand_screenshot` to capture page state (optional, for debugging).
-               - Use `browserbase_stagehand_get_url` to verify navigation.
-            
-            7. EFFICIENCY - MINIMIZE OBSERVE, MAXIMIZE EXTRACT AND NATURAL LANGUAGE:
-               - PREFER extract over observe for reading data: "Extract the top 5 products" instead of observe then extract.
-               - PREFER natural language actions: "Scroll down to see trending products" instead of observe.
-               - Only observe when you MUST find a specific button/link to click that you can't describe naturally.
-               - If observe returns empty ONCE, immediately switch to extract or natural language - don't retry observe.
-               - Maximum 2-3 observe calls per task - if they fail, use extract or natural language actions.
-               - For ProductHunt: Use "Extract the top 5 trending AI products with names and descriptions" directly.
-               - Combine actions: "Scroll down and extract products" instead of observe+act+extract.
-            
-            8. COMPLETION - MANDATORY SESSION CLOSURE + FINISH:
-               - When the task is COMPLETE (you have the required information), you MUST:
-                 1. First call `browserbase_session_close` with flowState to close the session.
-                 2. Then IMMEDIATELY reply with status `finish` (do NOT call another tool after closing).
-               - After calling `browserbase_session_close`, the NEXT decision MUST be status `finish`.
-               - DO NOT call any other tools after closing the session.
-               - The finish summary should clearly state what was accomplished.
-               - Example: Close session → Next decision: {{"status": "finish", "response": "Task completed: ..."}}
-
-            Respond only with valid JSON following this schema:
+            Respond with JSON:
             {{
                 "status": "call_tool" | "finish",
-                "tool": "<name when status=call_tool>",
-                "arguments": {{... arguments object ...}},
-                "response": "<final summary when status=finish>",
-                "reasoning": "<short explanation>"
+                "tool": "<tool name>",
+                "arguments": {{...}},
+                "reasoning": "<why you chose this action>",
+                "response": "<summary when finish>"
             }}
             """
         ).strip()
@@ -290,12 +219,16 @@ class OrchestratorAgent:
         await self._ensure_session()
         summary = "Maximum step count reached without finish signal."
 
+        # Take initial screenshot after navigation
+        last_screenshot = None
+        
         for step in range(1, self.max_steps + 1):
-            # Get LLM decision
+            # Get LLM decision (pass screenshot if available)
             decision = await self.planner.decide(
                 self.task_prompt,
                 self.history,
                 self.mcp_client.describe_state(),
+                screenshot=last_screenshot,
             )
 
             # Stream LLM reasoning
@@ -366,6 +299,8 @@ class OrchestratorAgent:
                 try:
                     screenshot_result = await self.mcp_client.invoke("browserbase_stagehand_screenshot", {})
                     screenshot_data = self._extract_screenshot(screenshot_result)
+                    if screenshot_data:
+                        last_screenshot = screenshot_data  # Store for next decision
                     # Update flowState after screenshot
                     self._persist_flow_state()
                 except Exception as e:
@@ -374,6 +309,8 @@ class OrchestratorAgent:
             else:
                 # If screenshot was the tool, extract it from result
                 screenshot_data = self._extract_screenshot(result)
+                if screenshot_data:
+                    last_screenshot = screenshot_data  # Store for next decision
 
             self._record_step(step, decision, result)
             
@@ -538,22 +475,43 @@ class OrchestratorAgent:
         if isinstance(content, list):
             for item in content:
                 if isinstance(item, dict):
-                    # Check for image data
-                    if item.get("type") == "image" and "data" in item:
-                        return item.get("data")
-                    # Check for base64 encoded image
-                    if "image" in item or "screenshot" in item:
+                    # Check for image data (MCP format: type="image", data="base64...")
+                    if item.get("type") == "image":
+                        # Check various possible fields
                         data = item.get("data") or item.get("image") or item.get("screenshot")
                         if data:
+                            # Ensure it's base64 format (starts with data:image or is base64 string)
+                            if isinstance(data, str):
+                                if data.startswith("data:image"):
+                                    return data
+                                elif len(data) > 100:  # Likely base64 image data
+                                    return data
+                    # Check for base64 encoded image in other fields
+                    if "image" in item or "screenshot" in item:
+                        data = item.get("data") or item.get("image") or item.get("screenshot")
+                        if data and isinstance(data, str) and len(data) > 100:
                             return data
         
         # Check raw response
         raw = result.get("raw", {})
         if isinstance(raw, dict):
             if "screenshot" in raw:
-                return raw["screenshot"]
+                screenshot = raw["screenshot"]
+                if isinstance(screenshot, str) and len(screenshot) > 100:
+                    return screenshot
             if "image" in raw:
-                return raw["image"]
+                image = raw["image"]
+                if isinstance(image, str) and len(image) > 100:
+                    return image
+        
+        # Check message field (sometimes screenshot is in message text)
+        message = result.get("message", "")
+        if isinstance(message, str) and ("screenshot" in message.lower() or "image" in message.lower()):
+            # Try to extract base64 from message
+            import re
+            base64_match = re.search(r'data:image/[^;]+;base64,([A-Za-z0-9+/=]+)', message)
+            if base64_match:
+                return f"data:image/png;base64,{base64_match.group(1)}"
         
         return None
 
