@@ -236,7 +236,21 @@ async def replay_flowstate(request: dict):
                     except Exception:
                         pass
                     
+                    # Stream action details before replay
+                    actions = flow_state.get("actions", [])
+                    for i, action in enumerate(actions):
+                        action_data = action.get("data", {})
+                        action_desc = action_data.get("description") or action_data.get("action") or f"Action {i+1}"
+                        await updates_queue.put({
+                            "type": "replay_action",
+                            "action_index": i + 1,
+                            "total_actions": len(actions),
+                            "description": action_desc,
+                            "action_type": action.get("type", "unknown"),
+                        })
+                    
                     # Execute replay using browserbase_stagehand_act with replayState
+                    # Per MCP guide: replayState triggers full replay mode
                     replay_result = await mcp_client.invoke(
                         "browserbase_stagehand_act",
                         {"replayState": flow_state}
