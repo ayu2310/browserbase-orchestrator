@@ -74,6 +74,16 @@ class Planner:
 
             Available tools: {", ".join(ALLOWED_TOOLS)}
 
+            TOOL SCHEMAS (REQUIRED PARAMETERS):
+            - `browserbase_session_create`: {{"flowState": {{"cacheKey": "..."}}}} (flowState optional but recommended)
+            - `browserbase_session_close`: {{"flowState": ...}} (flowState required - use current flowState)
+            - `browserbase_stagehand_navigate`: {{"url": "https://...", "flowState": ...}} (url REQUIRED, flowState required)
+            - `browserbase_stagehand_observe`: {{"instruction": "Find the login button", "returnAction": true, "flowState": ...}} (instruction REQUIRED, flowState required)
+            - `browserbase_stagehand_act`: {{"action": "Click the submit button", "flowState": ...}} OR {{"observation": {{...}}, "flowState": ...}} (action OR observation required, flowState required)
+            - `browserbase_stagehand_extract`: {{"instruction": "Extract the top 5 products with names and descriptions", "flowState": ...}} (instruction REQUIRED, flowState required)
+            - `browserbase_stagehand_screenshot`: {{"flowState": ...}} (flowState required)
+            - `browserbase_stagehand_get_url`: {{"flowState": ...}} (flowState required)
+
             CRITICAL TOOL USAGE RULES:
             
             1. SESSION MANAGEMENT:
@@ -152,7 +162,7 @@ class Planner:
                 messages=[
                     {
                         "role": "system",
-                        "content": "You are a precise automation planner. Follow the tool usage rules strictly. Avoid unnecessary observe calls. Always close sessions when finishing. Always output valid JSON.",
+                        "content": "You are a precise automation planner. Follow the tool usage rules strictly. CRITICAL: You MUST include ALL required parameters in the 'arguments' object for each tool call. For example, browserbase_stagehand_extract REQUIRES 'instruction' parameter. Do NOT omit required parameters. Avoid unnecessary observe calls. Always close sessions when finishing. Always output valid JSON.",
                     },
                     {"role": "user", "content": prompt},
                 ],
