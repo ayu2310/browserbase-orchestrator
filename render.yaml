@@ -2,7 +2,7 @@ services:
   - type: web
     name: browserbase-orchestrator-api
     env: docker
-    plan: starter
+    plan: free
     dockerfilePath: ./Dockerfile
     envVars:
       - key: OPENAI_API_KEY
