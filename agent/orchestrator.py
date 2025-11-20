@@ -258,9 +258,15 @@ class OrchestratorAgent:
             if decision.status == "finish":
                 summary = decision.response or "Task marked as complete."
                 
+                # Preserve flowState before closing session
+                preserved_flow_state = self.mcp_client.flow_state
+                
                 # Close session before finishing
                 try:
                     await self.mcp_client.invoke("browserbase_session_close", {})
+                    # Restore preserved flowState (closing might clear it)
+                    if preserved_flow_state and not self.mcp_client.flow_state:
+                        self.mcp_client.flow_state = preserved_flow_state
                     self._persist_flow_state()
                     if self.on_update:
                         await self.on_update({
@@ -360,13 +366,16 @@ class OrchestratorAgent:
         except Exception:
             pass
         
+        # Preserve flowState before closing (in case close clears it)
+        final_flow_state = self.mcp_client.flow_state
+        
         await self.mcp_client.close()
         return OrchestratorResult(
             cache_key=self.cache_key,
             mode=self.mode,
             summary=summary,
             steps=self.history,
-            flow_state=self.mcp_client.flow_state,
+            flow_state=final_flow_state,  # Use preserved flowState
         )
 
     async def _run_replay(self) -> OrchestratorResult:
