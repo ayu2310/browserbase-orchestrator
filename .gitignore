@@ -39,6 +39,8 @@ Thumbs.db
 .pytest_cache/
 .coverage
 htmlcov/
+test_output/
+test_*.py
 
 # Deployment
 .env.cloud
