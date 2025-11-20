@@ -531,52 +531,73 @@ class OrchestratorAgent:
         return summary[:800]
 
     def _extract_screenshot(self, result: Dict[str, Any]) -> Optional[str]:
-        """Extract screenshot data from MCP response."""
+        """Extract screenshot data from MCP response and ensure it's in visible format for frontend."""
         if not result:
             return None
         
-        # Try to find screenshot in various response formats
+        screenshot_data = None
+        
+        # Method 1: Check content array (MCP standard format)
         content = result.get("content")
         if isinstance(content, list):
             for item in content:
                 if isinstance(item, dict):
-                    # Check for image data (MCP format: type="image", data="base64...")
+                    # MCP image format: {"type": "image", "data": "base64..." or "data:image/..."}
                     if item.get("type") == "image":
-                        # Check various possible fields
                         data = item.get("data") or item.get("image") or item.get("screenshot")
-                        if data:
-                            # Ensure it's base64 format (starts with data:image or is base64 string)
-                            if isinstance(data, str):
-                                if data.startswith("data:image"):
-                                    return data
-                                elif len(data) > 100:  # Likely base64 image data
-                                    return data
-                    # Check for base64 encoded image in other fields
-                    if "image" in item or "screenshot" in item:
-                        data = item.get("data") or item.get("image") or item.get("screenshot")
-                        if data and isinstance(data, str) and len(data) > 100:
-                            return data
+                        if data and isinstance(data, str):
+                            screenshot_data = data
+                            break
+                    # Also check for image_url format
+                    if item.get("type") == "image_url":
+                        url = item.get("url") or item.get("image_url")
+                        if url and isinstance(url, str):
+                            screenshot_data = url
+                            break
         
-        # Check raw response
-        raw = result.get("raw", {})
-        if isinstance(raw, dict):
-            if "screenshot" in raw:
-                screenshot = raw["screenshot"]
-                if isinstance(screenshot, str) and len(screenshot) > 100:
-                    return screenshot
-            if "image" in raw:
-                image = raw["image"]
-                if isinstance(image, str) and len(image) > 100:
-                    return image
+        # Method 2: Check raw response (direct MCP server response)
+        if not screenshot_data:
+            raw = result.get("raw", {})
+            if isinstance(raw, dict):
+                # Check various possible keys
+                for key in ["screenshot", "image", "imageData", "screenshotData", "data"]:
+                    if key in raw:
+                        val = raw[key]
+                        if isinstance(val, str) and len(val) > 100:
+                            screenshot_data = val
+                            break
         
-        # Check message field (sometimes screenshot is in message text)
-        message = result.get("message", "")
-        if isinstance(message, str) and ("screenshot" in message.lower() or "image" in message.lower()):
-            # Try to extract base64 from message
-            import re
-            base64_match = re.search(r'data:image/[^;]+;base64,([A-Za-z0-9+/=]+)', message)
-            if base64_match:
-                return f"data:image/png;base64,{base64_match.group(1)}"
+        # Method 3: Check top-level keys in result
+        if not screenshot_data:
+            for key in ["screenshot", "image", "imageData", "screenshotData"]:
+                if key in result:
+                    val = result[key]
+                    if isinstance(val, str) and len(val) > 100:
+                        screenshot_data = val
+                        break
+        
+        # Method 4: Check message field (sometimes screenshot is embedded in text)
+        if not screenshot_data:
+            message = result.get("message", "")
+            if isinstance(message, str) and len(message) > 100:
+                import re
+                # Try to extract data URI
+                data_uri_match = re.search(r'data:image/[^;]+;base64,([A-Za-z0-9+/=]+)', message)
+                if data_uri_match:
+                    screenshot_data = f"data:image/png;base64,{data_uri_match.group(1)}"
+                else:
+                    # Try to find long base64 string (likely image)
+                    base64_match = re.search(r'([A-Za-z0-9+/=]{500,})', message)
+                    if base64_match:
+                        screenshot_data = base64_match.group(1)
+        
+        # Ensure screenshot is in proper format for frontend (data:image/png;base64,...)
+        if screenshot_data:
+            if screenshot_data.startswith("data:image"):
+                return screenshot_data
+            elif len(screenshot_data) > 100:
+                # Assume it's base64, add data URI prefix
+                return f"data:image/png;base64,{screenshot_data}"
         
         return None
 
