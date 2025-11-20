@@ -140,3 +140,13 @@ def list_executions(limit: int = 20) -> List[Dict[str, Any]]:
     conn.close()
     return [dict(row) for row in rows]
 
+
+def clear_all_data() -> None:
+    """Clear all flow states and executions."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM flow_states")
+    cursor.execute("DELETE FROM executions")
+    conn.commit()
+    conn.close()
+
