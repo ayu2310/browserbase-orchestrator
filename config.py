@@ -29,7 +29,7 @@ TEMPORAL_TLS_CA_PATH: Optional[str] = os.getenv("TEMPORAL_TLS_CA_PATH")
 
 # Gemini configuration
 GEMINI_API_KEY: Optional[str] = os.getenv("GEMINI_API_KEY")
-GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-3.0-pro")
+GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-3.0")
 
 # Browserbase MCP configuration
 BROWSERBASE_MCP_URL: str = os.getenv(
