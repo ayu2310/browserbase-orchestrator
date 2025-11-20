@@ -5,10 +5,10 @@ services:
     plan: free
     dockerfilePath: ./Dockerfile
     envVars:
-      - key: OPENAI_API_KEY
+      - key: GEMINI_API_KEY
         sync: false
-      - key: OPENAI_MODEL
-        value: gpt-4o
+      - key: GEMINI_MODEL
+        value: gemini-2.0-flash-exp
       - key: BROWSERBASE_MCP_URL
         value: https://browserbase-mcp-server.vercel.app/api/mcp
       - key: DATABASE_PATH
