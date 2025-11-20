@@ -279,28 +279,9 @@ class OrchestratorAgent:
             if decision.status == "finish":
                 summary = decision.response or "Task marked as complete."
                 
-                # Preserve flowState before closing session
+                # Preserve flowState (session will be closed by API server)
                 preserved_flow_state = self.mcp_client.flow_state
-                
-                # Close session before finishing
-                try:
-                    await self.mcp_client.invoke("browserbase_session_close", {})
-                    # Restore preserved flowState (closing might clear it)
-                    if preserved_flow_state and not self.mcp_client.flow_state:
-                        self.mcp_client.flow_state = preserved_flow_state
-                    self._persist_flow_state()
-                    if self.on_update:
-                        await self.on_update({
-                            "type": "session_closed",
-                            "message": "Browser session closed",
-                        })
-                except Exception as e:
-                    # Session close is best effort, but log it
-                    if self.on_update:
-                        await self.on_update({
-                            "type": "session_closed",
-                            "message": f"Session close attempted: {str(e)}",
-                        })
+                self._persist_flow_state()
                 
                 if self.on_update:
                     await self.on_update({
@@ -375,22 +356,7 @@ class OrchestratorAgent:
                 # Continue to next step instead of breaking
                 result = {"message": f"Tool failed: {tool_error}"}
             
-            # If session was closed, next decision should be finish
-            if decision.tool == "browserbase_session_close":
-                # Wait for next decision which should be finish
-                next_decision = await self.planner.decide(
-                    self.task_prompt,
-                    self.history,
-                    self.mcp_client.describe_state(),
-                )
-                if next_decision.status == "finish":
-                    summary = next_decision.response or "Task completed."
-                    if self.on_update:
-                        await self.on_update({
-                            "type": "complete",
-                            "summary": summary,
-                        })
-                    break
+            # Note: Session closing is handled by API server, not here
             
             # Take screenshot after EVERY step (required for agent to see and frontend to display)
             screenshot_data = None
@@ -398,9 +364,13 @@ class OrchestratorAgent:
                 # If screenshot was the tool, extract it from result
                 screenshot_data = self._extract_screenshot(result)
                 if screenshot_data:
-                    last_screenshot = screenshot_data  # Store for next decision
+                    # Ensure proper format
+                    if not screenshot_data.startswith("data:image"):
+                        screenshot_data = f"data:image/png;base64,{screenshot_data}"
+                    last_screenshot = screenshot_data
             else:
                 # Take screenshot after every other action (CRITICAL: agent needs to see page state)
+                # Always try to get screenshot - it's essential for agent vision
                 try:
                     screenshot_result = await self.mcp_client.invoke("browserbase_stagehand_screenshot", {})
                     screenshot_data = self._extract_screenshot(screenshot_result)
@@ -412,8 +382,8 @@ class OrchestratorAgent:
                     # Update flowState after screenshot
                     self._persist_flow_state()
                 except Exception as e:
-                    # Screenshot failed, but continue - agent will work without it
-                    # Log warning but don't break execution
+                    # Screenshot failed - log but continue
+                    # The agent will work without screenshots, but it's not ideal
                     pass
 
             self._record_step(step, decision, result)
@@ -435,26 +405,8 @@ class OrchestratorAgent:
                     "screenshot": screenshot_data,
                 })
 
-        # Ensure session is closed
-        try:
-            if self.mcp_client.has_active_session:
-                await self.mcp_client.invoke("browserbase_session_close", {})
-                self._persist_flow_state()
-        except Exception:
-            pass
-        
-        # Final cleanup - ensure session is closed
-        try:
-            if self.mcp_client.has_active_session:
-                await self.mcp_client.invoke("browserbase_session_close", {})
-                self._persist_flow_state()
-                if self.on_update:
-                    await self.on_update({
-                        "type": "session_closed",
-                        "message": "Browser session closed",
-                    })
-        except Exception:
-            pass
+        # Note: Session closing is handled by API server after task completion
+        # Do not close session here - let API server handle it
         
         # Preserve flowState before closing (in case close clears it)
         final_flow_state = self.mcp_client.flow_state

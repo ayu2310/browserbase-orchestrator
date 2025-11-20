@@ -87,6 +87,27 @@ async def run_task(request: dict):
                             prompt=task_prompt,
                             flow_state=result.flow_state,
                         )
+                    
+                    # HARD CODE: Close session after task completion
+                    try:
+                        from mcp_client import MCPClient
+                        mcp_client = MCPClient(cache_key=result.cache_key)
+                        if result.flow_state:
+                            mcp_client.hydrate(result.flow_state)
+                        if mcp_client.has_active_session:
+                            await mcp_client.invoke("browserbase_session_close", {})
+                        await mcp_client.close()
+                        await updates_queue.put({
+                            "type": "session_closed",
+                            "message": "Browser session closed after task completion",
+                        })
+                    except Exception as e:
+                        # Session close failed, but continue
+                        await updates_queue.put({
+                            "type": "session_closed",
+                            "message": f"Session close attempted: {str(e)}",
+                        })
+                    
                     await updates_queue.put({
                         "type": "final",
                         "cache_key": result.cache_key,
