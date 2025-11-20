@@ -4,22 +4,16 @@ services:
     env: docker
     plan: starter
     dockerfilePath: ./Dockerfile
-    buildCommand: ""
-    startCommand: python api_server.py
     envVars:
       - key: OPENAI_API_KEY
         sync: false
       - key: OPENAI_MODEL
-        sync: false
         value: gpt-4o
       - key: BROWSERBASE_MCP_URL
-        sync: false
         value: https://browserbase-mcp-server.vercel.app/api/mcp
       - key: DATABASE_PATH
-        sync: false
         value: /tmp/workflows.db
       - key: PORT
-        sync: false
         value: "8000"
 
 
