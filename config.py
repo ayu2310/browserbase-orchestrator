@@ -27,9 +27,9 @@ TEMPORAL_TLS_CERT_PATH: Optional[str] = os.getenv("TEMPORAL_TLS_CERT_PATH")
 TEMPORAL_TLS_KEY_PATH: Optional[str] = os.getenv("TEMPORAL_TLS_KEY_PATH")
 TEMPORAL_TLS_CA_PATH: Optional[str] = os.getenv("TEMPORAL_TLS_CA_PATH")
 
-# OpenAI configuration
-OPENAI_API_KEY: Optional[str] = os.getenv("OPENAI_API_KEY")
-OPENAI_MODEL: str = os.getenv("OPENAI_MODEL", "gpt-4o")
+# Gemini configuration
+GEMINI_API_KEY: Optional[str] = os.getenv("GEMINI_API_KEY")
+GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-2.0-flash-exp")
 
 # Browserbase MCP configuration
 BROWSERBASE_MCP_URL: str = os.getenv(
@@ -42,6 +42,6 @@ DATABASE_PATH: str = os.getenv("DATABASE_PATH", "workflows.db")
 
 def validate_config() -> None:
     """Validate that required configuration is present."""
-    if not OPENAI_API_KEY:
-        raise ValueError("OPENAI_API_KEY environment variable is required")
+    if not GEMINI_API_KEY:
+        raise ValueError("GEMINI_API_KEY environment variable is required")
 

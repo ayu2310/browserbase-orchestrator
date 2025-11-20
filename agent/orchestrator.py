@@ -1,16 +1,17 @@
-"""Autonomous Browserbase orchestrator built on MCP + OpenAI."""
+"""Autonomous Browserbase orchestrator built on MCP + Gemini."""
 from __future__ import annotations
 
 import asyncio
+import base64
 import json
 import textwrap
 import uuid
 from dataclasses import dataclass, field
 from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple
 
-from openai import OpenAI
+import google.generativeai as genai
 
-from config import OPENAI_API_KEY, OPENAI_MODEL
+from config import GEMINI_API_KEY, GEMINI_MODEL
 from database import get_flow_state, init_database, save_flow_state
 from mcp_client import MCPClient
 
@@ -43,9 +44,10 @@ class Planner:
     """LLM-based planner that decides which MCP tool to call next."""
 
     def __init__(self) -> None:
-        if not OPENAI_API_KEY:
-            raise ValueError("OPENAI_API_KEY is required for orchestrator planner")
-        self.client = OpenAI(api_key=OPENAI_API_KEY)
+        if not GEMINI_API_KEY:
+            raise ValueError("GEMINI_API_KEY is required for orchestrator planner")
+        genai.configure(api_key=GEMINI_API_KEY)
+        self.model = genai.GenerativeModel(GEMINI_MODEL)
 
     async def decide(
         self,
@@ -54,7 +56,7 @@ class Planner:
         state_snapshot: str,
         screenshot: Optional[str] = None,
     ) -> PlannerDecision:
-        """Call GPT-4o to choose the next MCP tool invocation."""
+        """Call Gemini to choose the next MCP tool invocation."""
 
         screenshot_context = ""
         if screenshot:
@@ -177,33 +179,46 @@ class Planner:
         ).strip()
 
         def _call_llm() -> str:
-            messages = [
-                {
-                    "role": "system",
-                    "content": "You are a precise automation planner. Follow the tool usage rules strictly. CRITICAL RULES:\n1. You MUST include ALL required parameters in the 'arguments' object for each tool call.\n2. For browserbase_stagehand_extract, you MUST include 'instruction' parameter (string).\n3. For browserbase_stagehand_navigate, you MUST include 'url' parameter (string).\n4. For browserbase_stagehand_observe, you MUST include 'instruction' parameter (string).\n5. For browserbase_stagehand_act, you MUST include EITHER 'action' (string) OR 'observation' (object).\n6. flowState is AUTOMATICALLY handled by the system - you do NOT need to include it in arguments.\n7. flowState enables deterministic re-executions - the system automatically manages it for session continuity and replay.\n8. Use screenshots to see the page and make informed decisions.\n9. Avoid unnecessary observe calls (max 2-3 per task).\n10. Always close sessions when finishing.\n11. Always output valid JSON.",
-                },
-            ]
+            # System instruction
+            system_instruction = "You are a precise automation planner. Follow the tool usage rules strictly. CRITICAL RULES:\n1. You MUST include ALL required parameters in the 'arguments' object for each tool call.\n2. For browserbase_stagehand_extract, you MUST include 'instruction' parameter (string).\n3. For browserbase_stagehand_navigate, you MUST include 'url' parameter (string).\n4. For browserbase_stagehand_observe, you MUST include 'instruction' parameter (string).\n5. For browserbase_stagehand_act, you MUST include EITHER 'action' (string) OR 'observation' (object).\n6. flowState is AUTOMATICALLY handled by the system - you do NOT need to include it in arguments.\n7. flowState enables deterministic re-executions - the system automatically manages it for session continuity and replay.\n8. Use screenshots to see the page and make informed decisions.\n9. Avoid unnecessary observe calls (max 2-3 per task).\n10. Always close sessions when finishing.\n11. Always output valid JSON only, no markdown formatting."
             
-            # Add screenshot to user message if available
-            user_content = [{"type": "text", "text": prompt}]
+            # Build content for Gemini
+            content_parts = [prompt]
+            
+            # Add screenshot if available
             if screenshot:
-                # Screenshot is base64, add as image
-                user_content.append({
-                    "type": "image_url",
-                    "image_url": {
-                        "url": screenshot if screenshot.startswith("data:") else f"data:image/png;base64,{screenshot}"
-                    }
-                })
+                # Extract base64 data from data URI if needed
+                if screenshot.startswith("data:image"):
+                    # Extract base64 part after comma
+                    base64_data = screenshot.split(",", 1)[1]
+                else:
+                    base64_data = screenshot
+                
+                # Decode base64 to bytes
+                try:
+                    image_bytes = base64.b64decode(base64_data)
+                    # Add image part
+                    content_parts.append({
+                        "mime_type": "image/png",
+                        "data": image_bytes
+                    })
+                except Exception:
+                    # If image decode fails, continue without it
+                    pass
             
-            messages.append({"role": "user", "content": user_content})
-            
-            response = self.client.chat.completions.create(
-                model=OPENAI_MODEL,
+            # Generate with Gemini
+            generation_config = genai.types.GenerationConfig(
                 temperature=0.2,
-                response_format={"type": "json_object"},
-                messages=messages,
+                response_mime_type="application/json",
             )
-            return response.choices[0].message.content or "{}"
+            
+            response = self.model.generate_content(
+                content_parts,
+                generation_config=generation_config,
+                system_instruction=system_instruction,
+            )
+            
+            return response.text or "{}"
 
         raw = await asyncio.to_thread(_call_llm)
         try:

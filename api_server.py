@@ -461,7 +461,7 @@ if __name__ == "__main__":
     print(f"🚀 Starting Browserbase Orchestrator API")
     print(f"   Host: {host}")
     print(f"   Port: {port}")
-    print(f"   OpenAI API Key: {'Set' if os.getenv('OPENAI_API_KEY') else 'NOT SET'}")
+    print(f"   Gemini API Key: {'Set' if os.getenv('GEMINI_API_KEY') else 'NOT SET'}")
     print()
     
     uvicorn.run(
