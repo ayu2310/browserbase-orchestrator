@@ -138,17 +138,31 @@ class Planner:
         ).strip()
 
         def _call_llm() -> str:
+            messages = [
+                {
+                    "role": "system",
+                    "content": "You are a precise automation planner. Follow the tool usage rules strictly. CRITICAL RULES:\n1. You MUST include ALL required parameters in the 'arguments' object for each tool call.\n2. For browserbase_stagehand_extract, you MUST include 'instruction' parameter (string).\n3. For browserbase_stagehand_navigate, you MUST include 'url' parameter (string).\n4. For browserbase_stagehand_observe, you MUST include 'instruction' parameter (string).\n5. For browserbase_stagehand_act, you MUST include EITHER 'action' (string) OR 'observation' (object).\n6. flowState is AUTOMATICALLY handled by the system - you do NOT need to include it in arguments.\n7. flowState enables deterministic re-executions - the system automatically manages it for session continuity and replay.\n8. Use screenshots to see the page and make informed decisions.\n9. Avoid unnecessary observe calls (max 2-3 per task).\n10. Always close sessions when finishing.\n11. Always output valid JSON.",
+                },
+            ]
+            
+            # Add screenshot to user message if available
+            user_content = [{"type": "text", "text": prompt}]
+            if screenshot:
+                # Screenshot is base64, add as image
+                user_content.append({
+                    "type": "image_url",
+                    "image_url": {
+                        "url": screenshot if screenshot.startswith("data:") else f"data:image/png;base64,{screenshot}"
+                    }
+                })
+            
+            messages.append({"role": "user", "content": user_content})
+            
             response = self.client.chat.completions.create(
                 model=OPENAI_MODEL,
                 temperature=0.2,
                 response_format={"type": "json_object"},
-                messages=[
-                    {
-                        "role": "system",
-                        "content": "You are a precise automation planner. Follow the tool usage rules strictly. CRITICAL RULES:\n1. You MUST include ALL required parameters in the 'arguments' object for each tool call.\n2. For browserbase_stagehand_extract, you MUST include 'instruction' parameter (string).\n3. For browserbase_stagehand_navigate, you MUST include 'url' parameter (string).\n4. For browserbase_stagehand_observe, you MUST include 'instruction' parameter (string).\n5. For browserbase_stagehand_act, you MUST include EITHER 'action' (string) OR 'observation' (object).\n6. flowState is AUTOMATICALLY handled by the system - you do NOT need to include it in arguments.\n7. flowState enables deterministic re-executions - the system automatically manages it for session continuity and replay.\n8. Avoid unnecessary observe calls (max 2-3 per task).\n9. Always close sessions when finishing.\n10. Always output valid JSON.",
-                    },
-                    {"role": "user", "content": prompt},
-                ],
+                messages=messages,
             )
             return response.choices[0].message.content or "{}"
 
