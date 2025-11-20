@@ -127,12 +127,19 @@ class Planner:
             WORKFLOW:
             1. If no session: create session
             2. Navigate to target URL
-            3. Take screenshot to see the page
+            3. Take screenshot to see the page (screenshots are taken automatically after each step)
             4. Based on screenshot, decide actions:
                - If you need to find a button: observe (sparingly)
                - If you need to interact: act with natural language
                - If you need data: extract
-            5. When done: close session, then finish
+            5. Screenshots are automatically captured after each step - you will see them in your next decision
+            6. When done: close session, then finish
+            
+            IMPORTANT SCREENSHOT NOTE:
+            - Screenshots are automatically taken after EVERY step
+            - You will receive the latest screenshot with each decision request
+            - Use screenshots to understand the current page state before acting
+            - Screenshots help you see what happened after your actions
             
             IMPORTANT:
             - Use screenshots to understand the page before acting
@@ -288,8 +295,12 @@ class OrchestratorAgent:
                             "message": "Browser session closed",
                         })
                 except Exception as e:
-                    # Session close is best effort
-                    pass
+                    # Session close is best effort, but log it
+                    if self.on_update:
+                        await self.on_update({
+                            "type": "session_closed",
+                            "message": f"Session close attempted: {str(e)}",
+                        })
                 
                 if self.on_update:
                     await self.on_update({
@@ -381,9 +392,15 @@ class OrchestratorAgent:
                         })
                     break
             
-            # Take screenshot after each action (skip if tool was already screenshot)
+            # Take screenshot after EVERY step (required for agent to see and frontend to display)
             screenshot_data = None
-            if decision.tool != "browserbase_stagehand_screenshot":
+            if decision.tool == "browserbase_stagehand_screenshot":
+                # If screenshot was the tool, extract it from result
+                screenshot_data = self._extract_screenshot(result)
+                if screenshot_data:
+                    last_screenshot = screenshot_data  # Store for next decision
+            else:
+                # Take screenshot after every other action
                 try:
                     screenshot_result = await self.mcp_client.invoke("browserbase_stagehand_screenshot", {})
                     screenshot_data = self._extract_screenshot(screenshot_result)
@@ -392,13 +409,15 @@ class OrchestratorAgent:
                     # Update flowState after screenshot
                     self._persist_flow_state()
                 except Exception as e:
-                    # Screenshot is optional, continue if it fails
-                    pass
-            else:
-                # If screenshot was the tool, extract it from result
-                screenshot_data = self._extract_screenshot(result)
-                if screenshot_data:
-                    last_screenshot = screenshot_data  # Store for next decision
+                    # Screenshot failed, but continue - agent will work without it
+                    if self.on_update:
+                        await self.on_update({
+                            "type": "reasoning",
+                            "step": step,
+                            "reasoning": f"Screenshot unavailable: {str(e)}",
+                            "tool": "screenshot",
+                            "status": "warning",
+                        })
 
             self._record_step(step, decision, result)
             
