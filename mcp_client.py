@@ -12,7 +12,7 @@ from config import BROWSERBASE_MCP_URL
 
 class MCPClient:
     """Handles JSON-RPC calls to the Browserbase MCP server."""
-
+    
     def __init__(self, cache_key: str, base_url: str = BROWSERBASE_MCP_URL) -> None:
         self.base_url = base_url
         self.cache_key = cache_key
@@ -76,34 +76,34 @@ class MCPClient:
 
     async def _call_tool(self, tool_name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
         """Execute the JSON-RPC request."""
-        payload = {
-            "jsonrpc": "2.0",
-            "id": 1,
-            "method": "tools/call",
+                payload = {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "tools/call",
             "params": {"name": tool_name, "arguments": arguments},
-        }
-
-        response = await self.client.post(
-            self.base_url,
-            json=payload,
-            headers={
-                "Content-Type": "application/json",
+                }
+            
+            response = await self.client.post(
+                self.base_url,
+                json=payload,
+                headers={
+                    "Content-Type": "application/json",
                 "Accept": "application/json, text/event-stream",
             },
-        )
-        response.raise_for_status()
-        if not response.content:
+            )
+            response.raise_for_status()
+            if not response.content:
             raise RuntimeError(f"MCP server returned empty response ({response.status_code})")
-
-        content_type = response.headers.get("content-type", "")
+            
+            content_type = response.headers.get("content-type", "")
         data = self._parse_response_body(response, content_type)
 
         if "error" in data:
             error_msg = data["error"]
-            if isinstance(error_msg, dict):
+                    if isinstance(error_msg, dict):
                 error_msg = error_msg.get("message", error_msg)
             raise RuntimeError(f"MCP error: {error_msg}")
-
+                
         result = data.get("result", data)
         if not isinstance(result, dict):
             return {"raw": result}
@@ -115,9 +115,9 @@ class MCPClient:
             if "flowState" in result["raw"]:
                 # flowState is in raw but not extracted - this shouldn't happen but let's handle it
                 result["flowState"] = result["raw"]["flowState"]
+            
+            return result
         
-        return result
-
     def _parse_response_body(self, response: httpx.Response, content_type: str) -> Dict[str, Any]:
         """Parse JSON or SSE payloads."""
         if "text/event-stream" in content_type:
@@ -244,7 +244,7 @@ class MCPClient:
                 pass
 
         return None
-
+    
     async def close(self) -> None:
         """Close the HTTP client."""
         await self.client.aclose()
