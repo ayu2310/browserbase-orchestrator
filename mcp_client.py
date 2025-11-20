@@ -109,6 +109,13 @@ class MCPClient:
             return {"raw": result}
 
         result.setdefault("raw", result)
+        
+        # Debug: Check if flowState is in response but not being extracted
+        if "flowState" not in result and isinstance(result.get("raw"), dict):
+            if "flowState" in result["raw"]:
+                # flowState is in raw but not extracted - this shouldn't happen but let's handle it
+                result["flowState"] = result["raw"]["flowState"]
+        
         return result
 
     def _parse_response_body(self, response: httpx.Response, content_type: str) -> Dict[str, Any]:
@@ -150,9 +157,11 @@ class MCPClient:
 
     def _extract_flow_state(self, payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Attempt to locate a flowState object in the MCP response."""
-        # Direct flowState
+        # Direct flowState (check both camelCase and snake_case)
         if "flowState" in payload and isinstance(payload["flowState"], dict):
             return payload["flowState"]
+        if "flow_state" in payload and isinstance(payload["flow_state"], dict):
+            return payload["flow_state"]
 
         # Check content array
         content = payload.get("content")
