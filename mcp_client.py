@@ -143,6 +143,10 @@ class MCPClient:
             # Keep existing flowState but ensure cacheKey
             if "cacheKey" not in self.flow_state:
                 self.flow_state["cacheKey"] = self.cache_key
+        # If we still don't have flowState, create minimal one to ensure we always have something
+        if not self.flow_state:
+            # Create minimal flowState with cacheKey
+            self.flow_state = {"cacheKey": self.cache_key}
 
     def _extract_flow_state(self, payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Attempt to locate a flowState object in the MCP response."""
