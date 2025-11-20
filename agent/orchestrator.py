@@ -96,7 +96,7 @@ class Planner:
             4. browserbase_stagehand_observe
                When: You need to find a SPECIFIC element that's hard to describe (use sparingly, max 2-3 times per task)
                How: {{"instruction": "Find the login button", "returnAction": true}}
-               Note: Only use if natural language actions fail. Prefer browserbase_stagehand_act with natural language.
+               Note: Use this when you need to locate a specific element that's difficult to describe in natural language. Prefer browserbase_stagehand_act with natural language when possible. Use observe sparingly.
             
             5. browserbase_stagehand_act ⭐ USE THIS FOR ALL INTERACTIONS
                When: ANY interaction with the page (click, type, scroll, fill, select, etc.)
@@ -113,7 +113,7 @@ class Planner:
             6. browserbase_stagehand_extract
                When: Extract structured data from the page (reading only, no interactions)
                How: {{"instruction": "Extract the top 5 products with names and descriptions"}}
-               Note: Use this to get data. More reliable than observe for reading content.
+               Note: Use this when you need to get structured data from the page. This is for reading/extracting data only - no interactions. More reliable than observe for reading content.
             
             7. browserbase_stagehand_get_url
                When: Check current URL
@@ -130,12 +130,18 @@ class Planner:
             3. Screenshot is automatically taken - you will SEE the page in your next decision
             4. Based on the screenshot you SEE, decide actions:
                - Look at the screenshot to understand what's on the page
-               - If you need to find a button: observe (sparingly, max 2-3 times)
-               - If you need to interact: act with natural language
-               - If you need data: extract
+               - Use OBSERVE when you need to find a specific element (sparingly, max 2-3 times per task)
+               - Use ACT for ALL interactions (click, type, scroll, fill, select, wait, etc.) - this is your main tool
+               - Use EXTRACT when you need to get structured data from the page (reading only)
             5. After each action, screenshot is automatically taken - you will SEE the result in your next decision
             6. Use the screenshots to verify actions worked and plan next steps
             7. When done: return status "finish" (session will be closed automatically)
+            
+            TOOL USAGE SUMMARY:
+            - SCREENSHOT: Automatically provided with each decision - LOOK AT IT FIRST to see the page
+            - OBSERVE: Use sparingly (max 2-3 times) to find specific elements when natural language fails
+            - ACT: Use for ALL interactions (click, type, scroll, fill, select, wait, navigate, etc.) - this is your PRIMARY interaction tool
+            - EXTRACT: Use when you need structured data from the page (reading only, no interactions)
             
             CRITICAL SCREENSHOT WORKFLOW:
             - Screenshots are automatically taken after EVERY step (including navigate, act, extract, etc.)
@@ -150,11 +156,13 @@ class Planner:
             - Screenshots are your PRIMARY way of understanding page state - use them!
             
             CRITICAL INSTRUCTIONS:
-            - SCREENSHOTS: You will receive a screenshot with EVERY decision request - LOOK AT IT FIRST
-            - Use the screenshot to see what's on the page before deciding actions
+            - SCREENSHOTS: You will receive a screenshot with EVERY decision request - LOOK AT IT FIRST to see the page
+            - Use the screenshot to understand what's on the page before deciding actions
             - Screenshots show you the current state - use them to verify actions worked
-            - Prefer natural language actions over observe (observe max 2-3 times per task)
-            - Extract data directly - don't observe first
+            - OBSERVE: Use sparingly (max 2-3 times per task) only when you need to find a specific element that's hard to describe
+            - ACT: Use for ALL interactions (click, type, scroll, fill, select, wait, etc.) - this is your main tool for doing things
+            - EXTRACT: Use when you need structured data from the page (reading only, no interactions needed)
+            - Prefer ACT with natural language over OBSERVE when possible
             - When complete: return status "finish" (session closes automatically)
             
             Respond with JSON:
