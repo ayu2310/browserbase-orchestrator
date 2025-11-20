@@ -45,6 +45,8 @@ class Planner:
     def __init__(self) -> None:
         if not OPENAI_API_KEY:
             raise ValueError("OPENAI_API_KEY is required for orchestrator planner")
+        from openai import OpenAI
+        self.client = OpenAI(api_key=OPENAI_API_KEY)
         self.client = OpenAI(api_key=OPENAI_API_KEY)
 
     async def decide(
@@ -397,12 +399,28 @@ class OrchestratorAgent:
                         if not screenshot_data.startswith("data:image"):
                             screenshot_data = f"data:image/png;base64,{screenshot_data}"
                         last_screenshot = screenshot_data  # Store for next decision
-                    # Update flowState after screenshot
-                    self._persist_flow_state()
+                        # Update flowState after screenshot
+                        self._persist_flow_state()
+                    else:
+                        # Screenshot was called but extraction returned None - log for debugging
+                        if self.on_update:
+                            await self.on_update({
+                                "type": "reasoning",
+                                "step": step,
+                                "reasoning": f"Screenshot taken but extraction returned None. MCP response keys: {list(screenshot_result.keys()) if isinstance(screenshot_result, dict) else 'not a dict'}",
+                                "tool": "screenshot",
+                                "status": "warning",
+                            })
                 except Exception as e:
-                    # Screenshot failed - log but continue
-                    # The agent will work without screenshots, but it's not ideal
-                    pass
+                    # Screenshot failed - log the error for debugging
+                    if self.on_update:
+                        await self.on_update({
+                            "type": "reasoning",
+                            "step": step,
+                            "reasoning": f"Screenshot capture failed: {str(e)}",
+                            "tool": "screenshot",
+                            "status": "error",
+                        })
 
             self._record_step(step, decision, result)
             
