@@ -5,6 +5,11 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+# Fix Windows encoding issues
+import os
+if sys.platform == 'win32':
+    os.environ['PYTHONIOENCODING'] = 'utf-8'
+
 import httpx
 
 
@@ -113,7 +118,12 @@ async def test_full_flow():
                             elif event_type == "final":
                                 cache_key = data.get("cache_key")
                                 all_responses["execution"]["cache_key"] = cache_key
-                                all_responses["execution"]["flow_state"] = data.get("flow_state")
+                                flow_state = data.get("flow_state")
+                                if flow_state:
+                                    all_responses["execution"]["flow_state"] = flow_state
+                                    print(f"   FlowState captured: {len(flow_state.get('actions', []))} actions")
+                                else:
+                                    print(f"   ⚠️  No flowState in final event")
                                 print(f"\n🎉 Task completed!")
                                 print(f"   Cache Key: {cache_key}")
                                 print(f"   Summary: {data.get('summary', '')[:200]}")
@@ -155,10 +165,25 @@ async def test_full_flow():
             print("📡 Step 2: Accepting replay and executing deterministically...")
             print("-" * 80)
             
+            # Get flowState from final event, or from last step event
+            flow_state = all_responses["execution"].get("flow_state")
+            if not flow_state:
+                # Try to get from last step event
+                for event in reversed(all_responses["execution"]["events"]):
+                    if event["type"] == "step" and event["data"].get("flow_state"):
+                        flow_state = event["data"]["flow_state"]
+                        print(f"   Found flowState in step event")
+                        break
+            
             # Use flowState from execution if available, otherwise use cache_key
             replay_payload = {"cache_key": cache_key}
-            if all_responses["execution"].get("flow_state"):
-                replay_payload["flow_state"] = all_responses["execution"]["flow_state"]
+            if flow_state:
+                replay_payload["flow_state"] = flow_state
+                print(f"   Using flowState with {len(flow_state.get('actions', []))} actions")
+            else:
+                print(f"   ⚠️  No flowState captured, will try database lookup")
+            
+            print(f"   Replay payload keys: {list(replay_payload.keys())}")
             
             async with client.stream(
                 "POST",
