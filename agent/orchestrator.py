@@ -336,12 +336,18 @@ class OrchestratorAgent:
             
             # Stream step update with flowState and screenshot
             if self.on_update:
+                # Ensure flowState is included (should always exist now due to minimal creation)
+                flow_state_to_send = self.mcp_client.flow_state
+                if not flow_state_to_send:
+                    # Fallback: create minimal if somehow missing
+                    flow_state_to_send = {"cacheKey": self.cache_key}
+                
                 await self.on_update({
                     "type": "step",
                     "step": step,
                     "tool": decision.tool,
                     "result": self._summarize_result(result),
-                    "flow_state": self.mcp_client.flow_state,
+                    "flow_state": flow_state_to_send,
                     "screenshot": screenshot_data,
                 })
 
