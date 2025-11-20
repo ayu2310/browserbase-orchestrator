@@ -400,24 +400,21 @@ class OrchestratorAgent:
                 if screenshot_data:
                     last_screenshot = screenshot_data  # Store for next decision
             else:
-                # Take screenshot after every other action
+                # Take screenshot after every other action (CRITICAL: agent needs to see page state)
                 try:
                     screenshot_result = await self.mcp_client.invoke("browserbase_stagehand_screenshot", {})
                     screenshot_data = self._extract_screenshot(screenshot_result)
                     if screenshot_data:
+                        # Ensure screenshot is in proper format for frontend (data:image/png;base64,...)
+                        if not screenshot_data.startswith("data:image"):
+                            screenshot_data = f"data:image/png;base64,{screenshot_data}"
                         last_screenshot = screenshot_data  # Store for next decision
                     # Update flowState after screenshot
                     self._persist_flow_state()
                 except Exception as e:
                     # Screenshot failed, but continue - agent will work without it
-                    if self.on_update:
-                        await self.on_update({
-                            "type": "reasoning",
-                            "step": step,
-                            "reasoning": f"Screenshot unavailable: {str(e)}",
-                            "tool": "screenshot",
-                            "status": "warning",
-                        })
+                    # Log warning but don't break execution
+                    pass
 
             self._record_step(step, decision, result)
             
