@@ -127,25 +127,35 @@ class Planner:
             WORKFLOW:
             1. If no session: create session
             2. Navigate to target URL
-            3. Take screenshot to see the page (screenshots are taken automatically after each step)
-            4. Based on screenshot, decide actions:
-               - If you need to find a button: observe (sparingly)
+            3. Screenshot is automatically taken - you will SEE the page in your next decision
+            4. Based on the screenshot you SEE, decide actions:
+               - Look at the screenshot to understand what's on the page
+               - If you need to find a button: observe (sparingly, max 2-3 times)
                - If you need to interact: act with natural language
                - If you need data: extract
-            5. Screenshots are automatically captured after each step - you will see them in your next decision
-            6. When done: close session, then finish
+            5. After each action, screenshot is automatically taken - you will SEE the result in your next decision
+            6. Use the screenshots to verify actions worked and plan next steps
+            7. When done: return status "finish" (session will be closed automatically)
             
-            IMPORTANT SCREENSHOT NOTE:
-            - Screenshots are automatically taken after EVERY step
-            - You will receive the latest screenshot with each decision request
-            - Use screenshots to understand the current page state before acting
-            - Screenshots help you see what happened after your actions
+            CRITICAL SCREENSHOT WORKFLOW:
+            - Screenshots are automatically taken after EVERY step (including navigate, act, extract, etc.)
+            - You will RECEIVE the latest screenshot with EACH decision request
+            - The screenshot is included in your vision input - you can SEE the page
+            - ALWAYS look at the screenshot before deciding your next action
+            - Use screenshots to:
+              * Understand what's currently on the page
+              * Verify if your previous action worked
+              * Find elements to interact with
+              * Plan your next steps based on what you see
+            - Screenshots are your PRIMARY way of understanding page state - use them!
             
-            IMPORTANT:
-            - Use screenshots to understand the page before acting
-            - Prefer natural language actions over observe
+            CRITICAL INSTRUCTIONS:
+            - SCREENSHOTS: You will receive a screenshot with EVERY decision request - LOOK AT IT FIRST
+            - Use the screenshot to see what's on the page before deciding actions
+            - Screenshots show you the current state - use them to verify actions worked
+            - Prefer natural language actions over observe (observe max 2-3 times per task)
             - Extract data directly - don't observe first
-            - Close session when complete, then return finish status
+            - When complete: return status "finish" (session closes automatically)
             
             Respond with JSON:
             {{
