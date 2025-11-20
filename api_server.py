@@ -195,20 +195,27 @@ async def list_executions(limit: int = 20):
 async def replay_flowstate(request: dict):
     """Replay a flowState deterministically with streaming."""
     cache_key = request.get("cache_key")
-    
-    if not cache_key:
-        raise HTTPException(status_code=400, detail="cache_key is required")
+    flow_state = request.get("flow_state")  # Allow direct flowState or cache_key
     
     from database import get_flow_state
     from mcp_client import MCPClient
     from agent.orchestrator import OrchestratorAgent
     
-    # Get stored flowState
-    stored = get_flow_state(cache_key)
-    if not stored:
-        raise HTTPException(status_code=404, detail=f"No flowState found for cache_key: {cache_key}")
-    
-    flow_state = stored["flow_state"]
+    # Get flowState: either directly provided or from database
+    if flow_state:
+        # Use provided flowState directly
+        if cache_key and flow_state.get("cacheKey") != cache_key:
+            flow_state["cacheKey"] = cache_key
+        elif not flow_state.get("cacheKey"):
+            flow_state["cacheKey"] = cache_key or "replay-flow"
+    elif cache_key:
+        # Try to get from database
+        stored = get_flow_state(cache_key)
+        if not stored:
+            raise HTTPException(status_code=404, detail=f"No flowState found for cache_key: {cache_key}")
+        flow_state = stored["flow_state"]
+    else:
+        raise HTTPException(status_code=400, detail="Either cache_key or flow_state is required")
     
     async def generate_replay_stream():
         """Generate SSE stream of replay updates."""
