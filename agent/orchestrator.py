@@ -47,7 +47,9 @@ class Planner:
         if not GEMINI_API_KEY:
             raise ValueError("GEMINI_API_KEY is required for orchestrator planner")
         genai.configure(api_key=GEMINI_API_KEY)
-        self.model = genai.GenerativeModel(GEMINI_MODEL)
+        # System instruction is set when creating the model
+        system_instruction = "You are a precise automation planner. Follow the tool usage rules strictly. CRITICAL RULES:\n1. You MUST include ALL required parameters in the 'arguments' object for each tool call.\n2. For browserbase_stagehand_extract, you MUST include 'instruction' parameter (string).\n3. For browserbase_stagehand_navigate, you MUST include 'url' parameter (string).\n4. For browserbase_stagehand_observe, you MUST include 'instruction' parameter (string).\n5. For browserbase_stagehand_act, you MUST include EITHER 'action' (string) OR 'observation' (object).\n6. flowState is AUTOMATICALLY handled by the system - you do NOT need to include it in arguments.\n7. flowState enables deterministic re-executions - the system automatically manages it for session continuity and replay.\n8. Use screenshots to see the page and make informed decisions.\n9. Avoid unnecessary observe calls (max 2-3 per task).\n10. Always close sessions when finishing.\n11. Always output valid JSON only, no markdown formatting."
+        self.model = genai.GenerativeModel(GEMINI_MODEL, system_instruction=system_instruction)
 
     async def decide(
         self,
@@ -179,9 +181,6 @@ class Planner:
         ).strip()
 
         def _call_llm() -> str:
-            # System instruction
-            system_instruction = "You are a precise automation planner. Follow the tool usage rules strictly. CRITICAL RULES:\n1. You MUST include ALL required parameters in the 'arguments' object for each tool call.\n2. For browserbase_stagehand_extract, you MUST include 'instruction' parameter (string).\n3. For browserbase_stagehand_navigate, you MUST include 'url' parameter (string).\n4. For browserbase_stagehand_observe, you MUST include 'instruction' parameter (string).\n5. For browserbase_stagehand_act, you MUST include EITHER 'action' (string) OR 'observation' (object).\n6. flowState is AUTOMATICALLY handled by the system - you do NOT need to include it in arguments.\n7. flowState enables deterministic re-executions - the system automatically manages it for session continuity and replay.\n8. Use screenshots to see the page and make informed decisions.\n9. Avoid unnecessary observe calls (max 2-3 per task).\n10. Always close sessions when finishing.\n11. Always output valid JSON only, no markdown formatting."
-            
             # Build content for Gemini
             content_parts = [prompt]
             
@@ -215,7 +214,6 @@ class Planner:
             response = self.model.generate_content(
                 content_parts,
                 generation_config=generation_config,
-                system_instruction=system_instruction,
             )
             
             return response.text or "{}"
