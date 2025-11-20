@@ -75,14 +75,53 @@ class Planner:
             Available tools: {", ".join(ALLOWED_TOOLS)}
 
             TOOL SCHEMAS (REQUIRED PARAMETERS):
-            - `browserbase_session_create`: {{"flowState": {{"cacheKey": "..."}}}} (flowState optional but recommended)
-            - `browserbase_session_close`: {{"flowState": ...}} (flowState required - use current flowState)
-            - `browserbase_stagehand_navigate`: {{"url": "https://...", "flowState": ...}} (url REQUIRED, flowState required)
-            - `browserbase_stagehand_observe`: {{"instruction": "Find the login button", "returnAction": true, "flowState": ...}} (instruction REQUIRED, flowState required)
-            - `browserbase_stagehand_act`: {{"action": "Click the submit button", "flowState": ...}} OR {{"observation": {{...}}, "flowState": ...}} (action OR observation required, flowState required)
-            - `browserbase_stagehand_extract`: {{"instruction": "Extract the top 5 products with names and descriptions", "flowState": ...}} (instruction REQUIRED, flowState required)
-            - `browserbase_stagehand_screenshot`: {{"flowState": ...}} (flowState required)
-            - `browserbase_stagehand_get_url`: {{"flowState": ...}} (flowState required)
+            
+            IMPORTANT: flowState is automatically attached by the system, but you MUST still include it in your arguments 
+            for clarity. The system will merge it with your arguments.
+            
+            - `browserbase_session_create`: 
+              Arguments: {{"flowState": {{"cacheKey": "your-cache-key"}}}}
+              Note: Creates a new browser session. Use ONLY ONCE at the start.
+            
+            - `browserbase_session_close`: 
+              Arguments: {{"flowState": <current flowState>}}
+              Note: Closes the browser session. Call this when task is complete.
+            
+            - `browserbase_stagehand_navigate`: 
+              Arguments: {{"url": "https://example.com", "flowState": <current flowState>}}
+              Required: url (string) - the URL to navigate to
+              Note: Sets the startingUrl in flowState. Use this to go to a website.
+            
+            - `browserbase_stagehand_observe`: 
+              Arguments: {{"instruction": "Find the login button", "returnAction": true, "flowState": <current flowState>}}
+              Required: instruction (string) - what element to find
+              Optional: returnAction (boolean) - set to true to get actionable selectors
+              Note: Use SPARINGLY (max 2-3 times per task). Only when you need a specific clickable element.
+            
+            - `browserbase_stagehand_act`: 
+              Arguments (Mode 1 - Natural Language): {{"action": "Click the submit button", "flowState": <current flowState>}}
+              Arguments (Mode 2 - Deterministic): {{"observation": {{"selector": "...", "method": "click"}}, "flowState": <current flowState>}}
+              Required: EITHER "action" (string) OR "observation" (object from observe)
+              Note: Use for ALL browser interactions (click, type, scroll, fill forms, etc.)
+              Examples:
+                - Click: {{"action": "Click the login button"}}
+                - Type: {{"action": "Type 'search term' into the search box"}}
+                - Scroll: {{"action": "Scroll down to see more products"}}
+                - Fill: {{"action": "Fill the email field with 'user@example.com'"}}
+            
+            - `browserbase_stagehand_extract`: 
+              Arguments: {{"instruction": "Extract the top 5 products with their names, descriptions, and links", "flowState": <current flowState>}}
+              Required: instruction (string) - detailed extraction instructions
+              Note: Use this to extract structured data from pages. More reliable than observe for reading data.
+              Example: {{"instruction": "Extract the top 5 trending AI products with their names, descriptions, and what makes them trending"}}
+            
+            - `browserbase_stagehand_screenshot`: 
+              Arguments: {{"flowState": <current flowState>}}
+              Note: Captures a screenshot of the current page state.
+            
+            - `browserbase_stagehand_get_url`: 
+              Arguments: {{"flowState": <current flowState>}}
+              Note: Returns the current URL of the page.
 
             CRITICAL TOOL USAGE RULES:
             
@@ -162,7 +201,7 @@ class Planner:
                 messages=[
                     {
                         "role": "system",
-                        "content": "You are a precise automation planner. Follow the tool usage rules strictly. CRITICAL: You MUST include ALL required parameters in the 'arguments' object for each tool call. For example, browserbase_stagehand_extract REQUIRES 'instruction' parameter. Do NOT omit required parameters. Avoid unnecessary observe calls. Always close sessions when finishing. Always output valid JSON.",
+                        "content": "You are a precise automation planner. Follow the tool usage rules strictly. CRITICAL RULES:\n1. You MUST include ALL required parameters in the 'arguments' object for each tool call.\n2. For browserbase_stagehand_extract, you MUST include 'instruction' parameter (string).\n3. For browserbase_stagehand_navigate, you MUST include 'url' parameter (string).\n4. For browserbase_stagehand_observe, you MUST include 'instruction' parameter (string).\n5. For browserbase_stagehand_act, you MUST include EITHER 'action' (string) OR 'observation' (object).\n6. flowState will be automatically merged with your arguments, but still include it for clarity.\n7. Avoid unnecessary observe calls (max 2-3 per task).\n8. Always close sessions when finishing.\n9. Always output valid JSON.",
                     },
                     {"role": "user", "content": prompt},
                 ],
