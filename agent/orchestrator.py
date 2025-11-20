@@ -22,7 +22,7 @@ ALLOWED_TOOLS = [
     "browserbase_stagehand_observe",
     "browserbase_stagehand_act",
     "browserbase_stagehand_extract",
-    "browserbase_stagehand_screenshot",
+    "browserbase_screenshot",  # Correct tool name (not browserbase_stagehand_screenshot)
     "browserbase_stagehand_get_url",
     "browserbase_list_cached_actions",
 ]
@@ -338,7 +338,7 @@ class OrchestratorAgent:
                         # If tool fails, try to recover
                         if "not found" in tool_error.lower() or "error" in tool_error.lower():
                             # Tool doesn't exist or failed - try alternative approach
-                            if decision.tool == "browserbase_stagehand_screenshot":
+                            if decision.tool == "browserbase_screenshot":
                                 # Screenshot failed, continue without it
                                 result = {"message": "Screenshot unavailable, continuing"}
                                 break
@@ -380,7 +380,7 @@ class OrchestratorAgent:
             
             # Take screenshot after EVERY step (required for agent to see and frontend to display)
             screenshot_data = None
-            if decision.tool == "browserbase_stagehand_screenshot":
+            if decision.tool == "browserbase_screenshot":
                 # If screenshot was the tool, extract it from result
                 screenshot_data = self._extract_screenshot(result)
                 if screenshot_data:
@@ -392,7 +392,7 @@ class OrchestratorAgent:
                 # Take screenshot after every other action (CRITICAL: agent needs to see page state)
                 # Always try to get screenshot - it's essential for agent vision
                 try:
-                    screenshot_result = await self.mcp_client.invoke("browserbase_stagehand_screenshot", {})
+                    screenshot_result = await self.mcp_client.invoke("browserbase_screenshot", {})
                     screenshot_data = self._extract_screenshot(screenshot_result)
                     if screenshot_data:
                         # Ensure screenshot is in proper format for frontend (data:image/png;base64,...)
@@ -578,9 +578,17 @@ class OrchestratorAgent:
         if isinstance(content, list):
             for item in content:
                 if isinstance(item, dict):
-                    # MCP image format: {"type": "image", "data": "base64..." or "data:image/..."}
+                    # MCP image format: {"type": "image", "mimeType": "image/png", "source": {"dataUri": "data:image/png;base64,..."}}
                     if item.get("type") == "image":
-                        data = item.get("data") or item.get("image") or item.get("screenshot")
+                        # Check for source.dataUri (correct format)
+                        source = item.get("source", {})
+                        if isinstance(source, dict):
+                            data_uri = source.get("dataUri")
+                            if data_uri and isinstance(data_uri, str):
+                                screenshot_data = data_uri
+                                break
+                        # Fallback: check for direct data field
+                        data = item.get("data")
                         if data and isinstance(data, str):
                             screenshot_data = data
                             break
