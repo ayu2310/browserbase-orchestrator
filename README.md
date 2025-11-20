@@ -1,32 +1,39 @@
-# Browserbase Orchestrator - Production System
+# Browserbase Orchestrator - Production Ready
 
-An autonomous browser automation orchestrator with live streaming, built on Temporal, Browserbase MCP, and GPT-4o.
+Autonomous browser automation orchestrator with live streaming, built on Browserbase MCP and GPT-4o.
 
-## Status
+## 🚀 Quick Deploy to Render
 
-⚠️ **Currently in development** - Core functionality working, but needs testing and deployment.
+**Everything is ready!** Just 3 steps:
 
-## Quick Start
+1. **Create GitHub repo** and push:
+   ```bash
+   git remote add origin https://github.com/YOUR_USERNAME/YOUR_REPO.git
+   git push -u origin main
+   ```
 
-### Local Development
+2. **Deploy on Render**:
+   - Go to https://dashboard.render.com
+   - Click "New +" → "Blueprint"
+   - Select your repo
+   - Set `OPENAI_API_KEY` environment variable
+   - Click "Apply"
 
-```bash
-# 1. Install dependencies
-pip install -r requirements.txt
+3. **Done!** Your API will be live at `https://browserbase-orchestrator-api.onrender.com`
 
-# 2. Set environment variables
-export OPENAI_API_KEY=your_key_here
+See `DEPLOYMENT_STATUS.md` for detailed instructions.
 
-# 3. Initialize database
-python init_db.py
+## Features
 
-# 4. Start API server
-python api_server.py
-```
+- 🤖 **Autonomous Orchestration** - GPT-4o plans and executes browser tasks
+- 📡 **Live Streaming** - Real-time updates via SSE (reasoning, steps, screenshots)
+- 🔄 **FlowState Management** - Stateless architecture with deterministic replay
+- 💾 **Session Persistence** - Automatic session management and cleanup
+- ☁️ **Production Ready** - Deployed on Render, no Temporal needed
 
-### API Endpoint
+## API Usage
 
-**POST `/api/run`** - Run browser automation task with live streaming
+**POST `/api/run`** - Run browser automation task
 
 ```json
 {
@@ -35,44 +42,43 @@ python api_server.py
 }
 ```
 
-Returns Server-Sent Events (SSE) stream with:
-- `reasoning` - LLM reasoning
+Returns Server-Sent Events stream with:
+- `reasoning` - LLM reasoning for each step
 - `step` - Step completion with flowState and screenshot
 - `complete` - Final summary
 - `error` - Error messages
 
-## Known Issues
-
-1. **FlowState persistence** - Being fixed to ensure session reuse
-2. **Observe overuse** - Agent sometimes uses observe unnecessarily
-3. **Session management** - Multiple sessions being created (fixing)
-
-## Deployment
-
-### Render
-
-1. Connect GitHub repo to Render
-2. Use `render.yaml` configuration
-3. Set environment variables:
-   - `OPENAI_API_KEY`
-   - `BROWSERBASE_MCP_URL` (optional)
-   - `TEMPORAL_*` (if using Temporal)
-
-See `DEPLOY.md` for details.
-
-## Architecture
-
-- **API Server** (`api_server.py`) - FastAPI with SSE streaming
-- **Orchestrator** (`agent/orchestrator.py`) - GPT-4o planner
-- **MCP Client** (`mcp_client.py`) - Browserbase MCP integration
-- **Database** (`database.py`) - SQLite for flowState persistence
-
-## Testing
+## Local Development
 
 ```bash
-# Test with real task
-python test_real_task.py
+# Install dependencies
+pip install -r requirements.txt
+
+# Set environment variable
+export OPENAI_API_KEY=your_key_here
+
+# Start server
+python api_server.py
 ```
+
+## Project Structure
+
+```
+.
+├── api_server.py          # FastAPI server with SSE streaming
+├── agent/
+│   └── orchestrator.py    # GPT-4o orchestrator agent
+├── mcp_client.py          # Browserbase MCP client
+├── database.py            # SQLite persistence
+├── render.yaml            # Render deployment config
+└── Dockerfile             # Docker configuration
+```
+
+## Documentation
+
+- `DEPLOYMENT_STATUS.md` - Complete deployment guide
+- `DEPLOY_RENDER.md` - Detailed Render deployment steps
+- `MCP_SERVER_GUIDE.md` - Browserbase MCP server documentation
 
 ## License
 
