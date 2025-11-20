@@ -380,21 +380,10 @@ def _summarize_result(result: dict) -> str:
 @app.post("/api/clear")
 async def clear_state():
     """Clear all local state data (flow states and executions)."""
-    from database import get_connection
+    from database import clear_all_data
     
     try:
-        conn = get_connection()
-        cursor = conn.cursor()
-        
-        # Clear all flow states
-        cursor.execute("DELETE FROM flow_states")
-        
-        # Clear all executions
-        cursor.execute("DELETE FROM executions")
-        
-        conn.commit()
-        conn.close()
-        
+        clear_all_data()
         return {
             "status": "success",
             "message": "All local state data cleared. Ready for new tasks.",
