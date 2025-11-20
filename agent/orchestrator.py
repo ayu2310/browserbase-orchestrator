@@ -90,10 +90,10 @@ class Planner:
                How: {{"url": "https://example.com"}}
                Note: This sets the startingUrl but does NOT create actions. Use act for navigation interactions.
             
-            3. browserbase_stagehand_screenshot
+            3. browserbase_screenshot
                When: You need to see what's on the page
                How: {{}} (empty arguments)
-               Note: Use this frequently to understand page state. Take screenshots after important actions.
+               Note: Screenshots are automatically taken after each step and provided to you. You can also call this tool explicitly if needed, but it's usually automatic.
             
             4. browserbase_stagehand_observe
                When: You need to find a SPECIFIC element that's hard to describe (use sparingly, max 2-3 times per task)
