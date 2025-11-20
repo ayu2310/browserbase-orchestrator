@@ -312,11 +312,19 @@ async def replay_flowstate(request: dict):
                     # Extract updated flowState if returned
                     updated_flow_state = mcp_client.flow_state
                     
-                    # Close session
+                    # HARD CODE: Close session after replay
                     try:
-                        await mcp_client.invoke("browserbase_session_close", {})
-                    except Exception:
-                        pass
+                        if mcp_client.has_active_session:
+                            await mcp_client.invoke("browserbase_session_close", {})
+                        await updates_queue.put({
+                            "type": "session_closed",
+                            "message": "Browser session closed after replay",
+                        })
+                    except Exception as e:
+                        await updates_queue.put({
+                            "type": "session_closed",
+                            "message": f"Session close attempted: {str(e)}",
+                        })
                     
                     await mcp_client.close()
                     
