@@ -74,7 +74,7 @@ def get_flow_state(cache_key: str) -> Optional[Dict[str, Any]]:
     row = cursor.fetchone()
     conn.close()
     if not row:
-        return None
+    return None
     return {
         "cache_key": row["cache_key"],
         "prompt": row["prompt"],
