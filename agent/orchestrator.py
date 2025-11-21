@@ -522,12 +522,17 @@ class OrchestratorAgent:
         return result
 
     def _persist_flow_state(self) -> None:
+        """Persist flowState to database after every step to ensure it's always saved."""
         if self.mcp_client.flow_state:
             save_flow_state(
                 cache_key=self.cache_key,
                 prompt=self.task_prompt,
                 flow_state=self.mcp_client.flow_state,
             )
+        # Also ensure flowState is always maintained in memory
+        # If somehow flowState is None, create minimal one
+        if not self.mcp_client.flow_state:
+            self.mcp_client.flow_state = {"cacheKey": self.cache_key}
 
     def _record_step(
         self,
