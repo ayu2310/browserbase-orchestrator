@@ -16,8 +16,8 @@ from mcp_client import MCPClient
 
 
 ALLOWED_TOOLS = [
-    "browserbase_session_create",
-    "browserbase_session_close",
+    # NOTE: browserbase_session_create is NOT allowed - session is created automatically at start
+    "browserbase_session_close",  # Only for explicit closing (usually handled by API server)
     "browserbase_stagehand_navigate",
     "browserbase_stagehand_observe",
     "browserbase_stagehand_act",
@@ -71,36 +71,33 @@ class Planner:
             {screenshot_context}
             
             CRITICAL WORKFLOW FOR COMPLEX TASKS:
-            1. Always start with browserbase_session_create (if no session)
-            2. Navigate to the target URL
-            3. Take a screenshot to see the page
+            1. Session is ALREADY created for you - DO NOT call browserbase_session_create
+            2. Navigate to the target URL using browserbase_stagehand_navigate
+            3. Screenshots are automatically taken after each step - you will SEE the page
             4. Use browserbase_stagehand_act for ALL interactions (clicks, typing, scrolling, form filling)
             5. Use browserbase_stagehand_extract ONLY for reading/extracting data (not for interactions)
-            6. Take screenshots after important actions to verify results
-            7. Close session when done
+            6. When task is complete, return status "finish" (session will be closed automatically)
             
             AVAILABLE TOOLS (flowState is automatically handled - don't include it):
             
-            1. browserbase_session_create
-               When: Start of task (only if no session exists)
-               How: {{}} (empty arguments)
+            ⚠️ IMPORTANT: DO NOT call browserbase_session_create - session is already created for you!
             
-            2. browserbase_stagehand_navigate
+            1. browserbase_stagehand_navigate
                When: Go to a website or change pages
                How: {{"url": "https://example.com"}}
                Note: This sets the startingUrl but does NOT create actions. Use act for navigation interactions.
             
-            3. browserbase_screenshot
+            2. browserbase_screenshot
                When: You need to see what's on the page
                How: {{}} (empty arguments)
                Note: Screenshots are automatically taken after each step and provided to you. You can also call this tool explicitly if needed, but it's usually automatic.
             
-            4. browserbase_stagehand_observe
+            3. browserbase_stagehand_observe
                When: You need to find a SPECIFIC element that's hard to describe (use sparingly, max 2-3 times per task)
                How: {{"instruction": "Find the login button", "returnAction": true}}
                Note: Use this when you need to locate a specific element that's difficult to describe in natural language. Prefer browserbase_stagehand_act with natural language when possible. Use observe sparingly.
             
-            5. browserbase_stagehand_act ⭐ USE THIS FOR ALL INTERACTIONS
+            4. browserbase_stagehand_act ⭐ USE THIS FOR ALL INTERACTIONS
                When: ANY interaction with the page (click, type, scroll, fill, select, etc.)
                How: {{"action": "Natural language description of what to do"}}
                Examples:
@@ -112,23 +109,20 @@ class Planner:
                  - Wait: {{"action": "Wait for the page to load"}}
                IMPORTANT: This is the ONLY tool that creates actions in flowState. Use it for ALL user interactions.
             
-            6. browserbase_stagehand_extract
+            5. browserbase_stagehand_extract
                When: Extract structured data from the page (reading only, no interactions)
                How: {{"instruction": "Extract the top 5 products with names and descriptions"}}
                Note: Use this when you need to get structured data from the page. This is for reading/extracting data only - no interactions. More reliable than observe for reading content.
             
-            7. browserbase_stagehand_get_url
+            6. browserbase_stagehand_get_url
                When: Check current URL
                How: {{}} (empty arguments)
             
-            8. browserbase_session_close
-               When: Task is complete
-               How: {{}} (empty arguments)
-               Then: Immediately return status "finish"
+            ⚠️ DO NOT call browserbase_session_create or browserbase_session_close - these are handled automatically!
             
             WORKFLOW:
-            1. If no session: create session
-            2. Navigate to target URL
+            1. Session is ALREADY created - DO NOT call browserbase_session_create
+            2. Navigate to target URL using browserbase_stagehand_navigate
             3. Screenshot is automatically taken - you will SEE the page in your next decision
             4. Based on the screenshot you SEE, decide actions:
                - Look at the screenshot to understand what's on the page
@@ -137,7 +131,7 @@ class Planner:
                - Use EXTRACT when you need to get structured data from the page (reading only)
             5. After each action, screenshot is automatically taken - you will SEE the result in your next decision
             6. Use the screenshots to verify actions worked and plan next steps
-            7. When done: return status "finish" (session will be closed automatically)
+            7. When done: return status "finish" (session will be closed automatically by the system)
             
             TOOL USAGE SUMMARY:
             - SCREENSHOT: Automatically provided with each decision - LOOK AT IT FIRST to see the page
@@ -318,6 +312,19 @@ class OrchestratorAgent:
                         "message": summary,
                     })
                 break
+            
+            # Prevent LLM from calling browserbase_session_create (session is already created)
+            if decision.tool == "browserbase_session_create":
+                if self.on_update:
+                    await self.on_update({
+                        "type": "reasoning",
+                        "step": step,
+                        "reasoning": "Session already exists - skipping browserbase_session_create call. Continuing with task.",
+                        "tool": decision.tool,
+                        "status": "warning",
+                    })
+                # Skip this tool call and continue to next decision
+                continue
             
             # Handle tool errors gracefully - retry with different approach
             max_retries = 2

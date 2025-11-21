@@ -80,6 +80,7 @@ async def run_task(request: dict):
                 try:
                     result = await agent.run()
                     # Ensure flowState is saved to database for replay
+                    # IMPORTANT: Keep flowState in database until user accepts/rejects re-execution
                     if result.flow_state:
                         from database import save_flow_state
                         save_flow_state(
@@ -88,25 +89,8 @@ async def run_task(request: dict):
                             flow_state=result.flow_state,
                         )
                     
-                    # HARD CODE: Close session after task completion
-                    try:
-                        from mcp_client import MCPClient
-                        mcp_client = MCPClient(cache_key=result.cache_key)
-                        if result.flow_state:
-                            mcp_client.hydrate(result.flow_state)
-                        if mcp_client.has_active_session:
-                            await mcp_client.invoke("browserbase_session_close", {})
-                        await mcp_client.close()
-                        await updates_queue.put({
-                            "type": "session_closed",
-                            "message": "Browser session closed after task completion",
-                        })
-                    except Exception as e:
-                        # Session close failed, but continue
-                        await updates_queue.put({
-                            "type": "session_closed",
-                            "message": f"Session close attempted: {str(e)}",
-                        })
+                    # DO NOT close session here - keep it open until user accepts/rejects re-execution
+                    # Session will be closed after re-execution or rejection
                     
                     await updates_queue.put({
                         "type": "final",
@@ -312,7 +296,7 @@ async def replay_flowstate(request: dict):
                     # Extract updated flowState if returned
                     updated_flow_state = mcp_client.flow_state
                     
-                    # HARD CODE: Close session after replay
+                    # HARD CODE: Close session after replay completion
                     try:
                         if mcp_client.has_active_session:
                             await mcp_client.invoke("browserbase_session_close", {})
@@ -327,6 +311,10 @@ async def replay_flowstate(request: dict):
                         })
                     
                     await mcp_client.close()
+                    
+                    # Clear database after replay (user accepted re-execution)
+                    from database import clear_all_data
+                    clear_all_data()
                     
                     # Send completion
                     await updates_queue.put({
@@ -449,6 +437,56 @@ async def clear_state():
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error clearing state: {str(e)}")
+
+
+@app.post("/api/confirm")
+async def confirm_replay(request: dict):
+    """Handle user confirmation/rejection of re-execution.
+    
+    If accepted: triggers replay
+    If rejected: closes session and clears database
+    """
+    cache_key = request.get("cache_key")
+    accepted = request.get("accepted", False)
+    
+    from database import get_flow_state, clear_all_data
+    from mcp_client import MCPClient
+    
+    try:
+        if accepted:
+            # User accepted - replay will be handled by /api/replay endpoint
+            # This endpoint just confirms the decision
+            return {
+                "status": "accepted",
+                "message": "Re-execution accepted. Use /api/replay to execute.",
+                "cache_key": cache_key,
+            }
+        else:
+            # User rejected - close session and clear database
+            if cache_key:
+                stored = get_flow_state(cache_key)
+                if stored and stored.get("flow_state"):
+                    flow_state = stored["flow_state"]
+                    mcp_client = MCPClient(cache_key=cache_key)
+                    mcp_client.hydrate(flow_state)
+                    
+                    # Close session
+                    try:
+                        if mcp_client.has_active_session:
+                            await mcp_client.invoke("browserbase_session_close", {})
+                    except Exception:
+                        pass
+                    await mcp_client.close()
+            
+            # Clear database
+            clear_all_data()
+            
+            return {
+                "status": "rejected",
+                "message": "Re-execution rejected. Session closed and database cleared. Ready for new tasks.",
+            }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error handling confirmation: {str(e)}")
 
 
 if __name__ == "__main__":
